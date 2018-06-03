@@ -85,6 +85,27 @@ def singleByteXORDetect(hexciphertexts):
 
     return bestResult
 
+# Turns an ascii string into a hex string
+def asciiToHex(ascii):
+    return ''.join(prettyHex(ord(a)) for a in ascii)
+
+# Implementation of repeating key XOR. Returns the ciphertext as a hex string.
+def repeatingKeyXOR(plaintext, key):
+    bytetext = bytearray(plaintext, 'utf-8')
+    bytekey = bytearray(key, 'utf-8')
+
+    fullkey = bytearray(0)
+    pos = 0
+    while len(fullkey) < len(bytetext):
+        if pos >= len(bytekey):
+            pos = 0
+        fullkey.append(bytekey[pos])
+        pos += 1
+
+    byteciphertext = byteXOR(bytetext, fullkey)
+    hexciphertext = byteciphertext.encode('hex')
+    return hexciphertext
+
 # Converts a string to a binary string.
 def strToBinStr(st):
     return ' '.join(map(bin,bytearray(st, encoding='utf8')))
