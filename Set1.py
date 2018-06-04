@@ -23,7 +23,15 @@ def byteXOR(b1, b2):
 
 # Checks if a given string contains only ascii characters
 def is_ascii(s):
-    return all(ord(c) < 128 for c in s)
+    return all(ord(c) < 128 and ord(c) > 31 for c in s)
+
+# Returns the percentage of valid ascii characters in a given text.
+def ascii_test(text):
+    good = 0.0
+    for c in text:
+        if is_ascii(c):
+            good += 1.0
+    return good/len(text)*100.0
 
 # Returns the percentage of valid English words in a given text.
 # Likes to log to console when funky characters are passed in.
@@ -38,35 +46,60 @@ def checkEnglish(text):
           numEnglishWords += 1.0
     return numEnglishWords/numWords * 100.0
 
-# Actual letter frequency analysis method.
-# Taken from https://github.com/danepowell/cryptopals/
-# Score a string based on enlish letter frequencies.
-def english_test(str1):
-    frequencies = {'a':0.08167, 'b':0.01492, 'c':0.02782, 'd':0.04253, 'e':0.12702, 'f':0.02228, 'g':0.02015, 'h':0.06094, 'i':0.06966, 'j':0.00153, 'k':0.00772, 'l':0.04025, 'm':0.02406, 'n':0.06749, 'o':0.07507, 'p':0.01929, 'q':0.00095, 'r':0.05987, 's':0.06327, 't':0.09056, 'u':0.02758, 'v':0.00978, 'w':0.02360, 'x':0.00150, 'y':0.01974, 'z':0.00074, ' ':0.21}
-    str1 = str1.lower()
-    ss = 0.0
-    for letter in frequencies.iterkeys():
-        expected_frequency = frequencies[letter]
-        actual_frequency = str1.count(letter)
-        ss += pow(actual_frequency - expected_frequency, 2)
-    return ss
+# Simple chi-squared test. Python implementation of the algo presented at:
+# https://crypto.stackexchange.com/questions/30209/developing-algorithm-for-detecting-plain-text-via-frequency-analysis
+def english_test(text):
+    english_freq = [0.0651738, 0.0124248, 0.0217339, 0.0349835,
+    0.1041442, 0.0197881, 0.0158610, 0.0492888,
+    0.0558094, 0.0009033, 0.0050529, 0.0331490,
+    0.0202124, 0.0564513, 0.0596302, 0.0137645,
+    0.0008606, 0.0497563, 0.0515760, 0.0729357,
+    0.0225134, 0.0082903, 0.0171272, 0.0013692,
+    0.0145984, 0.0007836, 0.1918182]
+
+    count = [0] * 27
+    ignored = 0
+
+    for i in range(len(text)):
+        c = ord(text[i])
+        if c == 32:
+            count[26] += 1      # Space
+        elif c >= 65 and c <= 90:
+            count[c - 65] += 1  # uppercase A-Z
+        elif c >= 97 and c <= 122:
+            count[c - 97] += 1  # lowercase a-z
+        elif c >= 33 and c <= 126:
+            ignored += 1        # numbers and punctuation
+        elif c == 9 or c == 10 or c == 13:
+            ignored += 1        # TAB, CR, LF
+        else:
+            return float('inf')
+
+    score = 0
+    length = len(text) - ignored
+    for i in range(27):
+        observed = count[i]
+        expected = length * english_freq[i]
+        difference = observed - expected
+        score += difference*difference / expected
+
+    return score
 
 # Takes a bytearray of ciphertext encrypted with single-byte XOR
 # Outputs the single-byte key and the plaintext
 def singleByteXORBruteforce(cipherbytes):
-    hiscore = 0
+    hiscore = float("inf")
     foundKey = None
     foundPlaintext = ""
 
-    for key in range(256):
+    for key in range(32, 128):
         bytekey = [key] * len(cipherbytes)
         plaintext = byteXOR(cipherbytes, bytekey)
         try:
             score = english_test(plaintext)
         except:
-            score = 0
-
-        if(score > hiscore):
+            score = float('inf')
+        if(score < hiscore):
             hiscore = score
             foundKey = chr(key)
             foundPlaintext = plaintext
@@ -145,15 +178,17 @@ def findKeySizes(byteciphertext):
 
     return sorted(keysizes.iteritems(), key=lambda (k,v): (v,k))
 
+# Splits a bytearray into chunks of size blocksize.
 def generateBlocks(byteciphertext, blocksize):
     blocks = []
     blockoffset = 0
     for i in range(len(byteciphertext)/blocksize):
         blocks.append(byteciphertext[(blocksize*blockoffset):(blocksize*(blockoffset+1))])
-        blockoffset += blocksize
+        blockoffset += 1 # Here lies my sanity. RIP. This line used to read `blockoffset += blocksize` and it broke EVERYTHING. FOR DAYS.
     blocks.append(byteciphertext[(blocksize*blockoffset):])
     return blocks
 
+# Creates transposed blocks representing the columns of the blocks given as rows.
 def transposeBlocks(blocks):
     transposed = [None] * len(blocks[0])
     for i in range(len(transposed)):
@@ -165,11 +200,11 @@ def transposeBlocks(blocks):
                 pass
     return transposed
 
+# Breaks vigenere ciphers.
 def breakRepeatingKeyXOR(hexciphertext):
     byteciphertext = bytearray.fromhex(hexciphertext)
-    #keysizes = findKeySizes(byteciphertext)
-    keysizes = [('29', 2)]
-    hiscore = 0
+    keysizes = findKeySizes(byteciphertext)
+    hiscore = float("inf")
     bestKey = None
     bestPlaintext = None
 
@@ -179,24 +214,35 @@ def breakRepeatingKeyXOR(hexciphertext):
         transposedBlocks = transposeBlocks(blocks)
 
         foundKey = []
+        badKey = False
 
         for block in transposedBlocks:
-            foundKey.append(singleByteXORBruteforce(block)['key'])
-        print("%s" % ''.join(foundKey))
-        plaintext = repeatingKeyXOR(byteciphertext, foundKey).decode('hex')
-        score = english_test(plaintext)
-        if score > hiscore:
-            hiscore = score
-            bestKey = ''.join(foundKey)
-            bestPlaintext = plaintext
+            result = singleByteXORBruteforce(block)
+            if result['key'] is None:
+                badKey = True
+                break
+            foundKey.append(result['key'])
+
+        if not badKey:
+            plaintext = repeatingKeyXOR(byteciphertext, foundKey).decode('hex')
+            score = english_test(plaintext)
+            if score < hiscore:
+                hiscore = score
+                bestKey = ''.join(foundKey)
+                bestPlaintext = plaintext
 
     return {'key': bestKey, 'plaintext': bestPlaintext, 'score': hiscore}
 
-contents = ""
-with open('set1chal6.txt') as f:
-    for line in f.readlines():
-        contents += line.strip('\r\n')
+# Tests the breakRepeatingKeyXOR function on the file set1chal6.txt
+def testBreakRepeatingKeyXOR():
+    contents = ""
 
-hexciphertext = b64StrToHexStr(contents)
-result = breakRepeatingKeyXOR(hexciphertext)
-print("\nKey:\n %s\n\nPlaintext:\n %s" % (result['key'], result['plaintext']))
+    with open('set1chal6.txt') as f:
+        for line in f.readlines():
+            contents += line
+
+    hexciphertext = b64StrToHexStr(contents)
+    result = breakRepeatingKeyXOR(hexciphertext)
+    print("\nKey:\n %s\n\nPlaintext:\n %s" % (result['key'], result['plaintext']))
+
+testBreakRepeatingKeyXOR()
