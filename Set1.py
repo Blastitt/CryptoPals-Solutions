@@ -1,5 +1,7 @@
 import codecs
 import enchant
+from Crypto.Cipher import AES
+from collections import defaultdict
 
 # Converts a hex string to its base64 representation.
 def hexStrToB64Str(hexStr):
@@ -245,4 +247,43 @@ def testBreakRepeatingKeyXOR():
     result = breakRepeatingKeyXOR(hexciphertext)
     print("\nKey:\n %s\n\nPlaintext:\n %s" % (result['key'], result['plaintext']))
 
-testBreakRepeatingKeyXOR()
+# Takes the bytes representation of ciphertext and key and returns the plaintext.
+def decrypt_AES_ECB(ciphertext, key):
+    cipher = AES.new(key, AES.MODE_ECB)
+    return cipher.decrypt(ciphertext)
+
+def test_decrypt_AES_ECB():
+    contents = ""
+
+    with open('set1chal7.txt') as f:
+        for line in f.readlines():
+            contents += line
+    ciphertext = contents.decode('base64')
+    key = "YELLOW SUBMARINE"
+    print(decrypt_AES_ECB(ciphertext, key))
+
+def detectECB(ciphertexts):
+    maxScore = 0
+    ecbText = None
+
+    for ciphertext in ciphertexts:
+        repeats = defaultdict(lambda: -1)
+        for i in range(0, len(ciphertext), 16):
+            block = bytes(ciphertext[i:i+16])
+            repeats[block] += 1
+        score = sum(repeats.values())
+        if score > maxScore:
+            maxScore = score
+            ecbText = bytes(ciphertext)
+
+    return ecbText
+
+def testDetectECB():
+    ciphertexts = []
+
+    with open('set1chal8.txt') as f:
+        for line in f.readlines():
+            ciphertexts.append(bytearray.fromhex(line.strip('\r\n')))
+    print(detectECB(ciphertexts).encode('hex'))
+
+testDetectECB()
