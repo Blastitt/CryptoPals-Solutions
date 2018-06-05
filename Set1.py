@@ -1,4 +1,3 @@
-import codecs
 import enchant
 from Crypto.Cipher import AES
 from collections import defaultdict
@@ -285,5 +284,3 @@ def testDetectECB():
         for line in f.readlines():
             ciphertexts.append(bytearray.fromhex(line.strip('\r\n')))
     print(detectECB(ciphertexts).encode('hex'))
-
-testDetectECB()
