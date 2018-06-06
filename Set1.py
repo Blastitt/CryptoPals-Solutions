@@ -261,26 +261,20 @@ def test_decrypt_AES_ECB():
     key = "YELLOW SUBMARINE"
     print(decrypt_AES_ECB(ciphertext, key))
 
-def detectECB(ciphertexts):
-    maxScore = 0
-    ecbText = None
+def detectECB(ciphertext):
+    repeats = defaultdict(lambda: -1)
+    for i in range(0, len(ciphertext), AES.block_size):
+        block = bytes(ciphertext[i:i+AES.block_size])
+        repeats[block] += 1
+    score = sum(repeats.values())
 
-    for ciphertext in ciphertexts:
-        repeats = defaultdict(lambda: -1)
-        for i in range(0, len(ciphertext), 16):
-            block = bytes(ciphertext[i:i+16])
-            repeats[block] += 1
-        score = sum(repeats.values())
-        if score > maxScore:
-            maxScore = score
-            ecbText = bytes(ciphertext)
-
-    return ecbText
+    return score
 
 def testDetectECB():
-    ciphertexts = []
+    scores = []
 
     with open('set1chal8.txt') as f:
         for line in f.readlines():
-            ciphertexts.append(bytearray.fromhex(line.strip('\r\n')))
-    print(detectECB(ciphertexts).encode('hex'))
+            scores.append(detectECB(bytearray.fromhex(line.strip('\r\n'))))
+
+    print(scores)

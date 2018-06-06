@@ -1,5 +1,6 @@
 from Set1 import *
 from Crypto.Cipher import AES
+import random
 
 # Ensures all blocks of data are blocksize in length using PKCS#7 block padding.
 def padBlocks(data, blocksize):
@@ -26,7 +27,7 @@ def depadBlocks(data):
 # Takes the plaintext and key and generates ciphertext using AES ECB mode.
 def encrypt_AES_ECB(plaintext, key):
     cipher = AES.new(key, AES.MODE_ECB)
-    return cipher.encrypt(plaintext)
+    return cipher.encrypt(bytes(plaintext))
 
 # Takes a ciphertext, key, and initialization vector and finds the plaintext
 # using AES CBC mode.
@@ -40,7 +41,7 @@ def decrypt_AES_CBC(ciphertext, key, iv):
         prevCipherblock = bytearray(ciphertext[i:(i+AES.block_size)])
 
     return depadBlocks(bytes(plaintext))
-    
+
 # Takes a plaintext, key, and initialization vector and generates ciphertext
 # using AES CBC mode.
 def encrypt_AES_CBC(plaintext, key, iv):
@@ -55,6 +56,48 @@ def encrypt_AES_CBC(plaintext, key, iv):
         prevCipherblock = bytearray(cipherblock)
 
     return bytes(ciphertext)
+
+def randbytes(numbytes):
+    return ''.join(chr(random.randint(0,255)) for i in range(numbytes))
+
+def generateKey():
+    return randbytes(16)
+
+def encryption_oracle(plaintext):
+    prependBytes = randbytes(random.randint(5,10))
+    appendBytes = randbytes(random.randint(5,10))
+    plaintext = padBlocks((prependBytes + plaintext + appendBytes), AES.block_size)
+    AES_mode = random.randint(1,2)
+    key = generateKey()
+
+    if AES_mode == AES.MODE_CBC:
+        iv = bytearray(randbytes(16))
+        ciphertext = encrypt_AES_CBC(plaintext, key, iv)
+    else:
+        ciphertext = encrypt_AES_ECB(plaintext, key)
+
+    return {'mode': AES_mode, 'ciphertext': ciphertext}
+
+def detect_AES_mode(ciphertext):
+    ciphertext = bytearray.fromhex(bytes(ciphertext).encode('hex'))
+    detect = detectECB(ciphertext)
+    if detect:
+        return AES.MODE_ECB
+    else:
+        return AES.MODE_CBC
+
+def test_encryption_oracle():
+    contents = ''.join(['a']*100)
+    plaintext = contents
+    result = encryption_oracle(plaintext)
+    print(result)
+    return result['ciphertext']
+
+def test_detect_AES_mode():
+    ciphertext = test_encryption_oracle()
+    print("MODE: %d" % detect_AES_mode(ciphertext))
+
+test_detect_AES_mode()
 
 def test_encrypt_AES_CBC():
     contents = ""
