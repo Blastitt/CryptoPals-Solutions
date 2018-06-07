@@ -2,6 +2,17 @@ from Set1 import *
 from Crypto.Cipher import AES
 import random
 
+def randbytes(numbytes):
+    return ''.join(chr(random.randint(0,255)) for i in range(numbytes))
+
+def generateKey():
+    return randbytes(16)
+
+unknown_key = generateKey()
+unknown_string = ("Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28" +
+"gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvI" +
+"HNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK").decode('base64')
+
 # Ensures all blocks of data are blocksize in length using PKCS#7 block padding.
 def padBlocks(data, blocksize):
     if blocksize > 255:
@@ -57,12 +68,6 @@ def encrypt_AES_CBC(plaintext, key, iv):
 
     return bytes(ciphertext)
 
-def randbytes(numbytes):
-    return ''.join(chr(random.randint(0,255)) for i in range(numbytes))
-
-def generateKey():
-    return randbytes(16)
-
 def encryption_oracle(plaintext):
     prependBytes = randbytes(random.randint(5,10))
     appendBytes = randbytes(random.randint(5,10))
@@ -86,6 +91,46 @@ def detect_AES_mode(ciphertext):
     else:
         return AES.MODE_CBC
 
+def encrypt_ECB_unknown_string(test_input):
+    plaintext = padBlocks((test_input + unknown_string), AES.block_size)
+    ciphertext = encrypt_AES_ECB(plaintext, unknown_key)
+    return ciphertext
+
+def detect_cipher_blocksize(cipher_function):
+    base_length = len(bytes(cipher_function('')))
+    initial_diff = len(bytes(cipher_function('A'))) - (base_length+1)
+    count = 0
+    for i in range(2, 255):
+        length = len(bytes(cipher_function('A'*i)))
+        diff = (length) - (base_length + i)
+        if diff == initial_diff:
+            return count+1
+        count += 1
+
+def detect_cipher_ECB(cipher_function):
+    blocksize = detect_cipher_blocksize(cipher_function)
+    result =  detectECB(cipher_function('A'*blocksize*3))
+    return bool(result)
+
+def break_ECB_BAAT(cipher_function):
+    message_length = len(bytes(cipher_function('')))
+    plaintext = bytearray()
+
+    for count in range(message_length):
+        base_input = ('A' * (message_length - (count+1)))
+        ciphertext = bytes()
+
+        for i in range(256):
+            # i is the plaintext byte
+            test_input = base_input  + bytes(plaintext) + chr(i)
+            ciphertext = bytes(cipher_function(test_input)[:message_length])
+            if ciphertext == bytes(cipher_function(base_input)[:message_length]):
+                plaintext.append(chr(i))
+                break
+    return depadBlocks(bytes(plaintext))
+
+print(break_ECB_BAAT(encrypt_ECB_unknown_string))
+
 def test_encryption_oracle():
     contents = ''.join(['a']*100)
     plaintext = contents
@@ -96,8 +141,6 @@ def test_encryption_oracle():
 def test_detect_AES_mode():
     ciphertext = test_encryption_oracle()
     print("MODE: %d" % detect_AES_mode(ciphertext))
-
-test_detect_AES_mode()
 
 def test_encrypt_AES_CBC():
     contents = ""
