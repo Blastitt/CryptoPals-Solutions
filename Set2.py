@@ -1,6 +1,7 @@
 from Set1 import *
 from Crypto.Cipher import AES
 import random
+import re
 
 def randbytes(numbytes):
     return ''.join(chr(random.randint(0,255)) for i in range(numbytes))
@@ -129,7 +130,50 @@ def break_ECB_BAAT(cipher_function):
                 break
     return depadBlocks(bytes(plaintext))
 
-print(break_ECB_BAAT(encrypt_ECB_unknown_string))
+def parseCookie(cookie):
+    obj = {}
+    for pair in cookie.split('&'):
+        pair = pair.split('=')
+        obj[pair[0]] = pair[1]
+    return obj
+
+def generateCookie(profile):
+    cookie = ""
+    cookie += 'email' + '=' + profile['email'] + '&'
+    cookie += 'uid' + '=' + str(profile['uid']) + '&'
+    cookie += 'role' + '=' + profile['role']
+    return cookie
+
+def generateProfile(email):
+    email = re.sub('[=&]', '', email)
+    profile = {'email': email, 'uid': 10, 'role': 'user'}
+    return generateCookie(profile)
+
+def encryptProfile(email):
+    return encrypt_AES_ECB(padBlocks(generateProfile(email), AES.block_size), unknown_key)
+
+def decryptProfile(encryptedProfile):
+    return parseCookie(depadBlocks(decrypt_AES_ECB(encryptedProfile, unknown_key)))
+
+def ECB_cut_paste():
+    prePadding = 'A' * (AES.block_size - len("email="))
+    test_input = prePadding + padBlocks("admin", AES.block_size)
+
+    cutCiphertext = encryptProfile(test_input)[AES.block_size:(AES.block_size*2)]
+
+    base_cookie = "email=&uid=10&role="
+    real_input = ''
+
+    while not ((len(real_input) + len(base_cookie)) % AES.block_size == 0 ):
+        real_input += 'A'
+
+    realCiphertext = encryptProfile(real_input)
+
+    print(decryptProfile(realCiphertext))
+
+    brokenCiphertext = realCiphertext[:-AES.block_size] + cutCiphertext
+
+    return decryptProfile(brokenCiphertext)
 
 def test_encryption_oracle():
     contents = ''.join(['a']*100)
